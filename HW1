@@ -1,0 +1,57 @@
+*Homework1;
+*Question1;
+*PART A;
+libname test1 'C:\Users\tpateros\Downloads';
+proc import datafile = 'C:\Users\tpateros\Downloads\titanic.xlsx'
+	out = test1.titanic
+	dbms=xlsx
+	replace; 
+	SHEET = "Sheet1";
+	getnames=yes;
+run;
+proc datasets library=test1;
+run;
+
+*PART B:
+Generate a 1 X 2 tabular output for the total observations and variables included in the SAS data set.;
+proc sql;
+Title "Q1 Part B";
+	select nobs, nvar
+	from dictionary.tables
+	where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+*PART C: Generate a list containing the attributes of the variables;
+proc sql;
+    title "Variable Attributes of test1.titanic";
+    select name,
+           type,
+           length,
+           format,
+           label
+    from dictionary.columns
+    where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+*PARTD:	Create two variables and then display the number of numeric and character variables without creating a SAS data set.;
+
+data _null_;
+	set test1.titanic;
+
+	if 18> Age then Category = 'Minor';
+	else if  18<=Age<=60 then Category = 'Young Adult';
+	else if 60 < Age then Category = 'Elder';
+	else Category = 'Unknown';
+
+	Name_and_Age = catx(' ',Name,put(Age,8.));
+run;
+
+proc sql;
+	select
+		count(case when type = "num" then 1 else 0 end) as Numeric?_Variables,
+        count(case when type = "char" then 1 else 0 end) as Character_Variables
+	from dictionary.columns
+	where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+
