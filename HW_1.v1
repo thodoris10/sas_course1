@@ -1,0 +1,73 @@
+*Homework1;
+*Question1;
+*PART A;
+libname test1 'C:\Users\tpateros\Downloads';
+proc import datafile = 'C:\Users\tpateros\Downloads\titanic.xlsx'
+	out = test1.titanic
+	dbms=xlsx
+	replace; 
+	SHEET = "Sheet1";
+	getnames=yes;
+run;
+proc datasets library=test1;
+run;
+
+*PART B:
+Generate a 1 X 2 tabular output for the total observations and variables included in the SAS data set.;
+proc sql;
+Title "Q1 Part B";
+	select nobs, nvar
+	from dictionary.tables
+	where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+*PART C: Generate a list containing the attributes of the variables;
+proc sql;
+    title "Variable Attributes of test1.titanic";
+    select name,
+           type,
+           length,
+           format,
+           label
+    from dictionary.columns
+    where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+*PARTD:	Create two variables and then display the number of numeric and character variables without creating a SAS data set.;
+data _null_;
+
+	set test1.titanic;
+
+	if 18> Age then Category = 'Minor';
+	else if  18<=Age<=60 then Category = 'Young Adult';
+	else if 60 < Age then Category = 'Elder';
+	else Category = 'Unknown';
+	Name_and_Age = catx(' ',Name,put(Age,8.));
+
+	array ch _character_;
+	count_char_vars= dim(ch);
+	array nm _numeric_;
+	count_num_vars= dim(nm);
+
+	put "Number of numeric variables:" count_num_vars;
+    put "Number of character variables:" count_char_vars;
+run;
+*** THIS IS WRONG. I NEED TO DO ONLY ONE LINE OF OUTPUT. MAYBE TRY USING THE RETAIN STATEMENT TO INITIALIZE COUNTR;
+
+*QUESTION2: Create a libref.catalog containing formats for the following variables PClass, and Embarked.;
+libname mylib 'C:\Users\tpateros\Downloads';
+
+proc format library=mylib.catalog1;
+	value Pclass
+		1 = "First Class"
+		2 = "Second Class"
+		3 = "Third Class";
+	value $Embarked
+		'C' = 'Cherbourg'
+		'Q' = 'Queenstown'
+		'S' = 'Southampton';
+run;
+
+*QUESTION3: Write SAS code snippets to generate and display the number of deaths by passenger class. 
+You must use PROC SORT, DATA step, and PROC PRINT based on the SAS data set and the format catalog you created 
+for items 1 and 2, respectively.;
