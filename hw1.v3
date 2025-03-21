@@ -1,0 +1,168 @@
+*Homework1;
+*Question1;
+*PART A;
+libname test1 'C:\Users\tpateros\Downloads';
+proc import datafile = 'C:\Users\tpateros\Downloads\titanic.xlsx'
+	out = test1.titanic
+	dbms=xlsx
+	replace; 
+	SHEET = "Sheet1";
+	getnames=yes;
+run;
+proc datasets library=test1;
+run;
+
+*PART B:
+Generate a 1 X 2 tabular output for the total observations and variables included in the SAS data set.;
+proc sql;
+Title "Q1 Part B";
+	select nobs, nvar
+	from dictionary.tables
+	where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+*PART C: Generate a list containing the attributes of the variables;
+proc sql;
+    title "Variable Attributes of test1.titanic";
+    select name,
+           type,
+           length,
+           format,
+           label
+    from dictionary.columns
+    where libname = "TEST1" and memname = "TITANIC";
+quit;
+
+*PARTD:	Create two variables and then display the number of numeric and character variables without creating a SAS data set.;
+data _null_;
+
+	set test1.titanic;
+
+	if 18> Age then Category = 'Minor';
+	else if  18<=Age<=60 then Category = 'Young Adult';
+	else if 60 < Age then Category = 'Elder';
+	else Category = 'Unknown';
+	Name_and_Age = catx(' ',Name,put(Age,8.));
+
+	array ch _character_;
+	count_char_vars= dim(ch);
+	array nm _numeric_;
+	count_num_vars= dim(nm);
+
+	put "Number of numeric variables:" count_num_vars;
+    put "Number of character variables:" count_char_vars;
+run;
+*** THIS IS WRONG. I NEED TO DO ONLY ONE LINE OF OUTPUT. MAYBE TRY USING THE RETAIN STATEMENT TO INITIALIZE COUNTR;
+
+*QUESTION2: Create a libref.catalog containing formats for the following variables PClass, and Embarked.;
+libname test1 'C:\Users\tpateros\Downloads';
+
+proc format library=test1.catalog1;
+	value Pclass_fmt
+		1 = 'First Class'
+		2 = 'Second Class'
+		3 = 'Third Class';
+	value $Embarked_fmt
+		'C' = 'Cherbourg'
+		'Q' = 'Queenstown'
+		'S' = 'Southampton';
+run;
+
+*QUESTION3: Write SAS code snippets to generate and display the number of deaths by passenger class. 
+You must use PROC SORT, DATA step, and PROC PRINT based on the SAS data set and the format catalog you created 
+for items 1 and 2, respectively.;
+PROC SORT data=test1.titanic
+	out=test1.titanic_sorted;
+	BY Pclass;
+run;
+data test1.titanic_sorted_deaths;
+	set test1.titanic_sorted;
+	by Pclass;
+
+	if Survived = 0 then death = 1;
+	else death = 0;
+
+	retain deaths_by_group 0;
+
+	if first.Pclass then deaths_by_group = 0;
+	deaths_by_group + death;
+
+	if last.Pclass then output;
+run;
+
+options fmtsearch=(test1.catalog1);
+
+proc print data=test1.titanic_sorted_deaths;
+	var Pclass deaths_by_group;
+	format Pclass Pclass_fmt.;
+	title "Deaths by PClass";
+run;
+
+
+*QUESTION4:(_4Death_Rate_by_SES.sas): Write PROC SQL codes that will display a) the number of passengers, 
+b) the number of deaths, and c) the number of deaths per 1,000 passengers by passenger class. 
+You must do this in a single PROC SQL step based on the SAS data set and the format catalog you created for 
+items 1 and 2, respectively.;
+proc sql;
+select
+	Pclass format=Pclass_fmt.,
+	count(PassengerId) as Number_of_Passengers,
+	SUM(case when Survived = 0 then 1 else 0 end) as Number_of_Deaths,
+	calculated Number_of_Deaths/ calculated Number_of_Passengers * 1000 as Deaths_per1000
+from test1.titanic
+group by Pclass
+order by Pclass;
+quit;
+
+
+*QUESTION5:Create a SAS data set by constructing a new variable, 
+Weight_minus_MeanWeight, based on SASHELP.CLASS and show the listing of all 19 observations.;
+proc means data=sashelp.class noprint;
+	var weight;
+	output out=mean_weight(drop=_TYPE_ _FREQ_) mean=mean_weight;
+run;
+
+data q5_meanweight;
+	if _n_=1 then set mean_weight;
+	set sashelp.class(keep = name weight);
+
+	Weight_minus_MeanWeight = weight - mean_weight;
+run;
+
+
+*QUESTION6:;
+data data1;
+	infile datalines dlm=',';
+	informat MemberID $10. Gender $6. DOB date9. BeginEnroll date9. EndEnroll date9.;
+	format BeginEnroll date9. EndEnroll date9. DOB date9.;
+	input MemberID BeginEnroll ?? EndEnroll ?? DOB ?? Gender ;
+	
+    length BeginEnroll_1 EndEnroll_1 DOB_1 $15;
+    if BeginEnroll = . then BeginEnroll_1 = "Invalid date";
+    else BeginEnroll_1 = put(BeginEnroll, date9.); 
+    
+    if EndEnroll = . then EndEnroll_1 = "Invalid date";
+    else EndEnroll_1 = put(EndEnroll, date9.);
+    
+    if DOB = . then DOB_1 = "Invalid date";
+    else DOB_1 = put(DOB, date9.);
+
+	if Gender = 'M' then Gender = "Male";
+	else if Gender = 'F' then Gender = "Female";
+
+	if _n_ = 1 then do;
+		put @1 'Member_ID' @15 'Gender' @30 'DOB' @50 'BeginEnroll' @70 'EndEnroll';
+		put;
+	end;
+
+put @1 MemberID @15 Gender @30 DOB_1 @50 BeginEnroll_1 @70 EndEnroll_1;
+
+datalines;
+M00008501,5FEB2013,31Dec2013,14May1930, M
+M00008502,30FEB2013,31Dec2013, 24May1930, F
+M00008503,15JUL2013,31Nov2013,30Feb1930, F
+M00008504,25AUG2013,31Dec2013,14May1930, M
+M00008505,27EB2013,31Dec2013,14May1930, F
+;
+run;
+
