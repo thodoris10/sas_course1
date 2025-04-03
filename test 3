@@ -1,0 +1,59 @@
+*Read data and keep variables of interest;
+proc printto log='C:\Users\tpateros\Downloads\test3_log.txt' 
+             print='C:\Users\tpateros\Downloads\test3_output.txt'
+			 new;
+run;
+
+data mydata;
+	set tmp1.h197g;
+	keep DUPERSID XRAYS MAMMOG MRI;
+run;
+proc contents data = mydata;
+run;
+
+* Calculate how many people got a mammogram;
+proc sort data = mydata; by MAMMOG; run;
+data ques1;
+	set mydata;
+	count_of_mammograms + 1;
+	by MAMMOG;
+	if first.MAMMOG then count_of_mammograms = 1;
+	if last.MAMMOG;
+run;
+proc print data = ques1 noobs;
+	where MAMMOG = 1;
+	var MAMMOG count_of_mammograms;
+run;
+
+*Show this on the log;
+data _null_;
+	set ques1;
+	if MAMMOG = 1 then 
+		put 'Total Mammograms: ' count_of_mammograms;
+run;
+
+*Count # of dataset rows;
+data _null_;
+    set mydata nobs=num_obs;  /* Get the number of observations */
+    if _N_ = num_obs then 
+        put 'Total number of observations in dataset: ' num_obs;
+run;
+
+*How many people received MRI, MAMMOG, and an XRAY?;
+data _null_;
+    if 0 then set mydata nobs=nobs;
+	set mydata;
+	retain count 0;
+
+    if MRI = 1 and XRAYS = 1 and MAMMOG=1 then count + 1; 
+
+    if _N_ = nobs then do; 
+        put 'Number of people who received MRI, MAMMOG, and X-ray: ' count;
+    end;
+run;
+* Verify with PROC SQL;
+proc sql;
+    select count(*) as num_both_mri_xray
+    from mydata
+    where MRI = 1 and XRAYS = 1 and MAMMOG = 1;
+quit;
