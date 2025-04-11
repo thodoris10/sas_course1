@@ -211,3 +211,19 @@ from dictionary.tables
  quit;
 
  *Question 5 -- Create formats
+
+
+
+############################## Q8 JUST IN CASE
+#################################
+proc sql noprint;
+   select name
+   into :col_list separated by ', '
+   from dictionary.columns
+   where libname='WORK' and memname='PSAQFEWVARS'
+   order by name;
+quit;
+proc sql;
+   select &col_list
+   from PSAQFewVars;
+quit;
