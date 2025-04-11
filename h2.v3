@@ -1,0 +1,274 @@
+*DATA PROCESSING;
+%LET RootFolder= C:\Users\tpateros;
+FILENAME MYLOG "&RootFolder\LogOutput\FilterMatchMerge_log.TXT";
+FILENAME MYPRINT "&RootFolder\LogOutput\FilterMatchMerge_OUTPUT.TXT";
+PROC PRINTTO LOG=MYLOG PRINT=MYPRINT NEW;
+RUN;
+DM "Log; clear; output; clear; odsresults; clear";
+proc datasets lib=work kill nolist; quit; 
+
+options nocenter nodate nonumber obs=max formchar="|----|+|---+=|-/\<>*";
+libname library 'C:\Users\tpateros';
+
+%let kept_vars = dupersid resp53 perwt13f varstr varpsu agelast sex INSURC13
+                 edrecode povcat13 racethx resp53 RTHLTH53 totexp13
+				 OBVEXP13 OPTEXP13 ERTEXP13  IPTEXP13 RXEXP13
+				 MARRY53X FAMSZE53 EMPST53 REGION53
+				 inscov13 obtotv13 IPNGTD13
+                 panel insc1231;
+ Data work.PSAQ_Frame_2013;
+  set tmp1.h163 (keep=&kept_vars
+                     where = (panel = 18 
+                              & insc1231=1
+                              & agelast >=34 
+                              & perwt13f>0 )
+                    ); 
+
+		  *** Racethx_x variable (Dichotomous);
+		  if racethx =2 then r_racethx2 = 1;
+		  else if racethx in (1,3,4,5) then r_racethx2 = 2;
+		  else if racethx in (-7,-8,-9) then r_racethx2 = .;
+		  		  
+         *** New education variable (dichotomous);
+		  if edrecode in (1,2,13) then r_edrecode2=1; /* up to high school */
+          else if edrecode in (14,15,16) then r_edrecode2=2;   /* Some College  */
+          else if edrecode in (-1,-7,-8,-9) then r_edrecode2 = .; /* Missing/NA */
+         
+         *** Marital Status;
+		  if MARRY53X in (-7,-8,-9,6) then marital_s = .;
+		  else if MARRY53X in (1,7) then marital_s = 1;
+		  else if MARRY53X in (2,3,4,8,9,10) then marital_s = 2;
+		  else if MARRY53X = 5 then marital_s = 3;
+       	  
+         *** Family size;
+         if FAMSZE53 = 1 then d_famscat=1;
+		 else if FAMSZE53  = 2 then d_famscat=2;
+         else if FAMSZE53  = 3 then d_famscat=3;
+		 else if FAMSZE53 >=4 then d_famscat=4;
+
+         *** Employment status;
+		 if EMPST53 =1 then empstat13=1;
+		 else if EMPST53 in (2,3,4) then empstat13=2;  /*Need to check */
+
+		  *** New POVCAT variable;
+		  if povcat13 in (1,2,3 ) then r_povcat = 1;
+		  else if povcat13 =4 then r_povcat = 2;
+		  else if povcat13 =5 then r_povcat = 3;
+          else if povcat13 in (-7,-8,-9) then r_povcat = 4;
+       
+         *** Region;
+		 r_region = region53;
+		 if region53 = -1 then r_region = .;
+
+		 * New Perceived health status variable;
+
+		  if RTHLTH53 in (1,2) then health = 1;
+		  else if RTHLTH53 = 3 then health = 2;
+		  else if RTHLTH53 in (4,5) then health = 3;
+		  else if RTHLTH53 in (-7,-8,-9) then health = 4;
+
+         *** office-based provider visits;
+         	if obtotv13 >=10 then obv10_plus=1;
+           else obv10_plus = 2;
+  run;
+
+* Sort the data files before merging them in a DATA step;
+proc sort data=work.PSAQ_Frame_2013; 
+ by dupersid; 
+run;
+proc sort data=tmp1.h173 out=work.PSAQ_data;
+   by dupersid; 
+run;
+
+**Question 1;
+data work.MatchedPSAQ;
+  merge work.PSAQ_data (in=a)
+        work.PSAQ_Frame_2013 (in=b); by dupersid;
+run;
+
+data NonMatchedPSAQ;
+ merge  work.PSAQ_data (in=a)
+        work.PSAQ_Frame_2013 (in=b); by dupersid;
+ if a=1 & b ne 1; /* those observations in the psaq_data file but not in the PSAQ_Frame_2013 file */ 
+ run;
+
+ *Verify the results with proc sql;
+ proc sql;
+title1 'SQL subquery -Observations only in the psaq_data file';
+  select *
+  from work.PSAQ_data
+  where dupersid not in(select dupersid from work.PSAQ_Frame_2013);
+quit;
+
+*Question 2 - Get Meatdata;
+title 'Dictionary tables in data library';
+proc sql;
+select memname,
+        nobs format =comma9.
+       ,nvar format =comma9.
+       ,DATEPART(crdate) format date9. as Date_created label='Creation Date'
+       ,TIMEPART(crdate) format timeampm. as Time_created label='Creation Time'
+from dictionary.tables
+ where libname='WORK' and memname in ('MATCHEDPSAQ', 'NONMATCHEDPSAQ');
+ quit;
+
+ *Question 3;
+options nocenter nodate nonumber;
+proc sql;
+title1 'Inner Join';
+create table MatchedPSAQ_SQL as
+	select a.dupersid, a.varstr, a.varpsu, a.sex, a.racethx, a.edrecode, a.povcat13,
+		 b.varstr, b.varpsu, b.sex, b.psaqage,b.flushot, b.ofttobac, b.psaqwt
+	from PSAQ_Frame_2013 as a
+	inner join psaq_data as b
+	on a.dupersid = b.dupersid;
+quit;
+proc sql;
+title2 'Output Table with desired variables';
+	select dupersid label = 'DUPERSID', varstr label = 'VARSTR', varpsu label = 'VARPSU',
+			sex label = 'SEX', psaqage label = 'PSAQAGE', flushot label = 'FLUSHOT', 
+			ofttobac label = 'OFTTOBAC', psaqwt label = 'PSAQWT', racethx label = 'RACETHX',
+			edrecode label = 'EDRECODE', povcat13 label = 'POVCAT13' 
+	from MatchedPSAQ_SQL;
+quit;
+title2;
+
+
+*Question 4 - Get Meatdata;
+title 'MatchedPSAQ_SQL Metadata';
+proc sql;
+select memname,
+        nobs format =comma9.
+       ,nvar format =comma9.
+       ,DATEPART(crdate) format date9. as Date_created label='Creation Date'
+       ,TIMEPART(crdate) format timeampm. as Time_created label='Creation Time'
+from dictionary.tables
+ where libname='WORK' and memname in ('MATCHEDPSAQ_SQL');
+ quit;
+
+
+*Question 5 - Create formats;
+LIBNAME mylib1 'C:\Users\tpateros\Documents\test';
+proc format LIBRARY=mylib1.catalogpop;
+value age_f 
+    35-64 = 'Ages 35-64'
+	65-High ='Ages 65+';
+
+value resp53_fmt 1 = 'Self-Respondent'
+                  2 = 'Household Proxy'; 
+
+value sex_fmt   1 = 'Male'
+                2 = 'Female'; 
+	
+VALUE Racethx2_fmt
+  1 = 'NH White Only'
+  2 = 'Racial/Ethnic Minority' ;
+
+ value edu2_fmt 
+	       1 = 'Up to High School'
+		   2 = 'Some College';
+		   
+value povcat_fmt
+   1 = 'P/NPR/LOW INCOME' 
+   2 = 'MIDDLE INCOME'  
+   3 = 'HIGH INCOME' 
+   4 = 'Missing';
+ 
+  VALUE HEALTH_fmt
+      1='EXCELLENT/VERY GOOD' 
+      2 ='GOOD' 
+      3='FAIR/POOR' 
+      4='MISSING';
+
+  value Marital_fmt
+	    1 = 'Currently Married'
+		2 = 'Wid-Div-Sep'
+		3 = 'Never married';
+
+  value emp_fmt 1 = 'Employed'
+              2 = 'Not Employed';
+
+  value fms_fmt 1 = '1 Person'
+                2 =  '2 Persons'
+				3 =  '3 Persons'
+				4 =  '4+ Persons';
+
+  VALUE inscov_fmt
+        1='ANY PRIVATE'
+        2='PUBLIC ONLY'
+        3='UNINSURED';
+
+  value obv10_p_fmt 1 = '10+ Office-based visits'
+            2 = '0-9 Office-based visits';
+
+  value region_fmt
+      1 = 'Northeast'
+	  2 = 'Midwest'
+	  3 = 'South'
+	  4 = 'West';
+run;
+title;
+
+proc catalog catalog = mylib1.catalogpop;
+contents;
+run;
+
+proc format library=mylib1.catalogpop fmtlib;
+run;
+
+*Question 6;
+libname mylib1 'C:\Users\tpateros\Documents\test';
+options fmtsearch=(mylib1);
+proc freq data=work.Matchedpsaq;
+	tables r_racethx2 r_edrecode2 marital_s health r_povcat r_region;
+run;
+
+
+*Question 7;
+data PSAQFewVars;
+	set Matchedpsaq
+	(keep = dupersid PERWT13F varstr varpsu agelast sex insurc13 flushot ofttobac
+	rename = (perwt13f = PERWTF
+			insurc13 = INSURANCE_STATUS
+			FLUSHOT = FLU_VACCINE
+			OFTTOBAC = TOBACCO_USE));
+run;
+proc contents data = PSAQFewVars;
+run;
+
+*Question 8;
+proc sql;
+	select AGELAST, DUPERSID, FLU_VACCINE, INSURANCE_STATUS, PERWTF, SEX, TOBACCO_USE, VARPSU, VARSTR
+	from PSAQFewVars;
+quit;
+
+*Question 9;
+proc datasets lib=work memtype=data nolist;
+	modify PSAQFewVars;
+	attrib _all_ label=' '; 
+   	attrib _all_ format=;   
+run;
+quit;
+proc contents data = test1 varnum;
+ods select position;
+run;
+
+*Question 10;
+proc sql; 
+    select name
+        from dictionary.columns
+        where libname = 'TMP1' 
+          and memname='H163'
+			and (upcase(name) like '%13X' or upcase(name) like '%13F');
+quit;
+proc sql;
+    select memname, nobs 
+        from dictionary.tables
+        where upcase(libname) = 'work' 
+          and upcase(memtype)='var_names';
+quit;
+
+proc sql;
+select * from tmp1.h163;
+quit;
+where 
